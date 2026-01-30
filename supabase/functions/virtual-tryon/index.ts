@@ -81,9 +81,7 @@ const handler = async (req: Request): Promise<Response> => {
               },
               {
                 type: "image_url",
-                image_url: {
-                  url: image
-                }
+                image_url: image
               }
             ]
           }
