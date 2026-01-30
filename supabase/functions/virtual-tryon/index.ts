@@ -124,42 +124,13 @@ Requirements:
     let generatedImage: string | null = null;
     const message = data.choices?.[0]?.message;
 
-    // Check content_parts (Gemini native format)
-    if (message?.content_parts && Array.isArray(message.content_parts)) {
-      for (const part of message.content_parts) {
-        if (part.inline_data?.data) {
-          const mimeType = part.inline_data.mime_type || "image/png";
-          generatedImage = `data:${mimeType};base64,${part.inline_data.data}`;
+    // Check images array (primary format from needware API)
+    if (message?.images && Array.isArray(message.images)) {
+      for (const img of message.images) {
+        if (img.type === "image_url" && img.image_url?.url) {
+          generatedImage = img.image_url.url;
           break;
         }
-      }
-    }
-
-    // Check content array
-    if (!generatedImage && Array.isArray(message?.content)) {
-      for (const item of message.content) {
-        if (item.type === "image_url" && item.image_url?.url) {
-          generatedImage = item.image_url.url;
-          break;
-        }
-        if (item.type === "image" && item.data) {
-          generatedImage = `data:image/png;base64,${item.data}`;
-          break;
-        }
-        if (item.inline_data?.data) {
-          const mimeType = item.inline_data.mime_type || "image/png";
-          generatedImage = `data:${mimeType};base64,${item.inline_data.data}`;
-          break;
-        }
-      }
-    }
-
-    // Check for base64 string
-    if (!generatedImage && typeof message?.content === "string" && message.content) {
-      if (message.content.startsWith("data:image")) {
-        generatedImage = message.content;
-      } else if (message.content.length > 1000 && /^[A-Za-z0-9+/=\s]+$/.test(message.content)) {
-        generatedImage = `data:image/png;base64,${message.content.replace(/\s/g, '')}`;
       }
     }
 
