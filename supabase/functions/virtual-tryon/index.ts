@@ -165,7 +165,7 @@ Requirements:
 
     if (!generatedImage) {
       const reasoning = message?.reasoning;
-      console.error("No image in response. Full response:", JSON.stringify(data).slice(0, 2000));
+      console.error("No image in response. Full response:", JSON.stringify(data));
 
       return new Response(
         JSON.stringify({
