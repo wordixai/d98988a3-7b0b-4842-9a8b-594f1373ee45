@@ -1,41 +1,76 @@
 import { useState } from "react";
-import { Wand2, Download, Loader2 } from "lucide-react";
+import { Wand2, Download, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { ImageUploader } from "./ImageUploader";
 import { StyleSelector } from "./StyleSelector";
-
-// 模拟的生成结果图片
-const resultImages: Record<string, string> = {
-  business: "https://images.unsplash.com/photo-1617127365659-c47fa864d8bc?w=400&h=600&fit=crop",
-  casual: "https://images.unsplash.com/photo-1509631179647-0177331693ae?w=400&h=600&fit=crop",
-  street: "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=400&h=600&fit=crop",
-  elegant: "https://images.unsplash.com/photo-1518577915332-c2a19f149a75?w=400&h=600&fit=crop",
-  sporty: "https://images.unsplash.com/photo-1538805060514-97d9cc17730c?w=400&h=600&fit=crop",
-  vintage: "https://images.unsplash.com/photo-1485230895905-ec40ba36b9bc?w=400&h=600&fit=crop",
-};
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
 export function TrySection() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     if (!uploadedImage || !selectedStyle) return;
 
     setIsGenerating(true);
     setGeneratedImage(null);
+    setError(null);
 
-    // 模拟 AI 生成过程
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('virtual-tryon', {
+        body: {
+          image: uploadedImage,
+          style: selectedStyle
+        }
+      });
 
-    setGeneratedImage(resultImages[selectedStyle]);
-    setIsGenerating(false);
+      if (invokeError) {
+        throw invokeError;
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      if (data?.image) {
+        setGeneratedImage(data.image);
+        toast.success("换装成功！");
+      } else {
+        throw new Error("未能生成换装效果");
+      }
+    } catch (err: any) {
+      console.error("Virtual try-on error:", err);
+      const errorMessage = err.message || "换装失败，请重试";
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const handleDownload = () => {
-    if (generatedImage) {
-      window.open(generatedImage, "_blank");
+  const handleDownload = async () => {
+    if (!generatedImage) return;
+
+    try {
+      // Handle base64 images
+      if (generatedImage.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = generatedImage;
+        link.download = `ai-tryon-${Date.now()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success("图片已下载");
+      } else {
+        // Handle URL images
+        window.open(generatedImage, "_blank");
+      }
+    } catch (err) {
+      toast.error("下载失败，请重试");
     }
   };
 
@@ -113,9 +148,25 @@ export function TrySection() {
                 {/* Result Display */}
                 <div className="aspect-[3/4] rounded-xl overflow-hidden bg-muted/30 flex items-center justify-center">
                   {isGenerating ? (
-                    <div className="flex flex-col items-center gap-4">
+                    <div className="flex flex-col items-center gap-4 p-6">
                       <div className="w-16 h-16 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-                      <p className="text-muted-foreground">AI 正在为你换装...</p>
+                      <p className="text-muted-foreground text-center">
+                        AI 正在为你换装...
+                        <br />
+                        <span className="text-sm">这可能需要 10-30 秒</span>
+                      </p>
+                    </div>
+                  ) : error ? (
+                    <div className="flex flex-col items-center gap-4 p-6 text-center">
+                      <AlertCircle className="w-12 h-12 text-destructive" />
+                      <p className="text-muted-foreground">{error}</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setError(null)}
+                      >
+                        重试
+                      </Button>
                     </div>
                   ) : generatedImage ? (
                     <img
