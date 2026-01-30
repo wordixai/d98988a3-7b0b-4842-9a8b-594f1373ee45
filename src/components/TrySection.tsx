@@ -2,19 +2,19 @@ import { useState } from "react";
 import { Wand2, Download, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { ImageUploader } from "./ImageUploader";
-import { StyleSelector } from "./StyleSelector";
+import { ClothingSelector } from "./ClothingSelector";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
 export function TrySection() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
+  const [selectedClothing, setSelectedClothing] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
-    if (!uploadedImage || !selectedStyle) return;
+    if (!uploadedImage || !selectedClothing) return;
 
     setIsGenerating(true);
     setGeneratedImage(null);
@@ -23,8 +23,8 @@ export function TrySection() {
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('virtual-tryon', {
         body: {
-          image: uploadedImage,
-          style: selectedStyle
+          personImage: uploadedImage,
+          clothingImage: selectedClothing
         }
       });
 
@@ -58,7 +58,6 @@ export function TrySection() {
     if (!generatedImage) return;
 
     try {
-      // Handle base64 images
       if (generatedImage.startsWith('data:')) {
         const link = document.createElement('a');
         link.href = generatedImage;
@@ -68,7 +67,6 @@ export function TrySection() {
         document.body.removeChild(link);
         toast.success("图片已下载");
       } else {
-        // Handle URL images
         window.open(generatedImage, "_blank");
       }
     } catch (err) {
@@ -76,7 +74,7 @@ export function TrySection() {
     }
   };
 
-  const canGenerate = uploadedImage && selectedStyle && !isGenerating;
+  const canGenerate = uploadedImage && selectedClothing && !isGenerating;
 
   return (
     <section id="try" className="py-24 relative">
@@ -87,34 +85,34 @@ export function TrySection() {
             立即<span className="gradient-text">体验</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            上传你的照片，选择喜欢的风格，让 AI 为你创造全新形象
+            上传你的照片，选择心仪的服装，让 AI 为你完成换装
           </p>
         </div>
 
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Step 1: Upload */}
+            {/* Step 1: Upload Person Photo */}
             <div className="glass-card rounded-2xl p-6">
               <div className="flex items-center gap-2 mb-6">
                 <span className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center text-sm font-bold">
                   1
                 </span>
-                <span className="font-semibold">上传照片</span>
+                <span className="font-semibold">上传你的照片</span>
               </div>
               <ImageUploader image={uploadedImage} onImageChange={setUploadedImage} />
             </div>
 
-            {/* Step 2: Select Style */}
+            {/* Step 2: Select Clothing */}
             <div className="glass-card rounded-2xl p-6">
               <div className="flex items-center gap-2 mb-6">
                 <span className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center text-sm font-bold">
                   2
                 </span>
-                <span className="font-semibold">选择风格</span>
+                <span className="font-semibold">选择服装</span>
               </div>
-              <StyleSelector
-                selectedStyle={selectedStyle}
-                onSelectStyle={setSelectedStyle}
+              <ClothingSelector
+                selectedClothing={selectedClothing}
+                onSelectClothing={setSelectedClothing}
               />
             </div>
 
@@ -137,7 +135,7 @@ export function TrySection() {
                   {isGenerating ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      AI 生成中...
+                      AI 换装中...
                     </>
                   ) : (
                     <>
@@ -173,14 +171,14 @@ export function TrySection() {
                   ) : generatedImage ? (
                     <img
                       src={generatedImage}
-                      alt="AI 生成结果"
+                      alt="AI 换装结果"
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     <div className="text-center p-8">
                       <Wand2 className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
                       <p className="text-muted-foreground">
-                        上传照片并选择风格后
+                        上传照片并选择服装后
                         <br />
                         点击"开始换装"查看效果
                       </p>

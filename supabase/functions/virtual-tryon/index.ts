@@ -9,19 +9,9 @@ const corsHeaders = {
 };
 
 interface VirtualTryOnRequest {
-  image: string;
-  style: string;
-  customPrompt?: string;
+  personImage: string;
+  clothingImage: string;
 }
-
-const stylePrompts: Record<string, string> = {
-  business: "高端商务正装，深色西装，白色衬衫，领带",
-  casual: "时尚休闲装，牛仔裤，简约T恤或休闲衬衫",
-  street: "潮流街头风格，oversized卫衣，运动鞋，棒球帽",
-  elegant: "优雅晚礼服，华丽典雅的正式礼服",
-  sporty: "运动健身装，运动服，运动鞋",
-  vintage: "复古风格服装，怀旧经典款式",
-};
 
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
@@ -32,30 +22,37 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { image, style, customPrompt }: VirtualTryOnRequest = await req.json();
+    const { personImage, clothingImage }: VirtualTryOnRequest = await req.json();
 
-    if (!image) {
+    if (!personImage) {
       return new Response(
-        JSON.stringify({ error: "请上传图片" }),
+        JSON.stringify({ error: "请上传人物照片" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    if (!style) {
+    if (!clothingImage) {
       return new Response(
-        JSON.stringify({ error: "请选择服装风格" }),
+        JSON.stringify({ error: "请选择服装图片" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    console.log("Processing virtual try-on request, style:", style);
+    console.log("Processing virtual try-on request with two images");
 
-    const styleDescription = stylePrompts[style] || customPrompt || "时尚现代的服装";
+    const prompt = `You are a virtual try-on AI. I'm giving you two images:
+1. First image: A photo of a person
+2. Second image: A clothing item
 
-    const prompt = `Edit this photo: Change the person's clothing to ${styleDescription}.
-Keep the person's face, skin tone, hair, pose, and expression exactly the same.
-Only change the clothes and accessories.
-Output the edited image directly.`;
+Your task: Generate a new image showing the person from image 1 wearing the clothing from image 2.
+
+Requirements:
+- Keep the person's face, body, pose, skin tone, and hair exactly the same
+- Replace their current clothing with the clothing from image 2
+- The clothing should fit naturally on the person's body
+- Maintain realistic lighting and shadows
+- Keep the same background as the original person photo
+- Output only the final edited image, no text explanation needed`;
 
     const response = await fetch("https://www.needware.dev/v1/chat/completions", {
       method: "POST",
@@ -75,12 +72,16 @@ Output the edited image directly.`;
               },
               {
                 type: "image_url",
-                image_url: image
+                image_url: personImage
+              },
+              {
+                type: "image_url",
+                image_url: clothingImage
               }
             ]
           }
         ],
-        temperature: 0.8,
+        temperature: 0.7,
         max_tokens: 8192,
       }),
     });
@@ -121,10 +122,9 @@ Output the edited image directly.`;
     console.log("AI response:", JSON.stringify(data).slice(0, 1000));
 
     let generatedImage: string | null = null;
-
-    // Check for image in content_parts (Gemini format)
     const message = data.choices?.[0]?.message;
 
+    // Check content_parts (Gemini native format)
     if (message?.content_parts && Array.isArray(message.content_parts)) {
       for (const part of message.content_parts) {
         if (part.inline_data?.data) {
@@ -135,7 +135,7 @@ Output the edited image directly.`;
       }
     }
 
-    // Check content array format
+    // Check content array
     if (!generatedImage && Array.isArray(message?.content)) {
       for (const item of message.content) {
         if (item.type === "image_url" && item.image_url?.url) {
@@ -154,7 +154,7 @@ Output the edited image directly.`;
       }
     }
 
-    // Check for base64 in content string
+    // Check for base64 string
     if (!generatedImage && typeof message?.content === "string" && message.content) {
       if (message.content.startsWith("data:image")) {
         generatedImage = message.content;
@@ -165,12 +165,12 @@ Output the edited image directly.`;
 
     if (!generatedImage) {
       const reasoning = message?.reasoning;
-      console.error("No image in response. Reasoning:", reasoning?.slice(0, 500));
+      console.error("No image in response. Full response:", JSON.stringify(data).slice(0, 2000));
 
       return new Response(
         JSON.stringify({
-          error: "AI 正在处理但未能生成图片，请重试",
-          debug: reasoning ? reasoning.slice(0, 100) : "无响应内容"
+          error: "AI 未能生成换装图片，请重试或换一张照片",
+          debug: reasoning ? reasoning.slice(0, 100) : "无法提取图片"
         }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
@@ -181,8 +181,7 @@ Output the edited image directly.`;
     return new Response(
       JSON.stringify({
         success: true,
-        image: generatedImage,
-        style: style
+        image: generatedImage
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
