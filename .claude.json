@@ -1,7 +1,8 @@
 {
   "cachedStatsigGates": {
     "tengu_prompt_suggestion": true,
-    "tengu_streaming_tool_execution2": false
+    "tengu_streaming_tool_execution2": false,
+    "tengu_session_memory": false
   },
   "cachedDynamicConfigs": {
     "tengu_1p_event_batch_config": {
@@ -53,5 +54,10 @@
       ],
       "exampleFilesGeneratedAt": 1769758170716
     }
+  },
+  "githubRepoPaths": {
+    "wordixai/d98988a3-7b0b-4842-9a8b-594f1373ee45": [
+      "/app"
+    ]
   }
 }

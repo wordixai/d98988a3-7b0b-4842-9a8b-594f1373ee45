@@ -119,7 +119,7 @@ Requirements:
     }
 
     const data = await response.json();
-    console.log("AI response:", JSON.stringify(data).slice(0, 1000));
+    console.log("AI response:", JSON.stringify(data, null, 2));
 
     let generatedImage: string | null = null;
     const message = data.choices?.[0]?.message;
