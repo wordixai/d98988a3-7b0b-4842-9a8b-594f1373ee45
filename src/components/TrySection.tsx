@@ -33,6 +33,7 @@ export function TrySection() {
       }
 
       if (data?.error) {
+        console.error("API error:", data.error, data.debug);
         throw new Error(data.error);
       }
 
@@ -40,7 +41,8 @@ export function TrySection() {
         setGeneratedImage(data.image);
         toast.success("换装成功！");
       } else {
-        throw new Error("未能生成换装效果");
+        console.error("Unexpected response:", data);
+        throw new Error("未能生成换装效果，请重试");
       }
     } catch (err: any) {
       console.error("Virtual try-on error:", err);

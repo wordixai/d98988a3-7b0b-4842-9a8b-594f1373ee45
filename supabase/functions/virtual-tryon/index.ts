@@ -9,8 +9,8 @@ const corsHeaders = {
 };
 
 interface VirtualTryOnRequest {
-  image: string; // base64 image
-  style: string; // clothing style
+  image: string;
+  style: string;
   customPrompt?: string;
 }
 
@@ -37,20 +37,14 @@ const handler = async (req: Request): Promise<Response> => {
     if (!image) {
       return new Response(
         JSON.stringify({ error: "请上传图片" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json", ...corsHeaders }
-        }
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
     if (!style) {
       return new Response(
         JSON.stringify({ error: "请选择服装风格" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json", ...corsHeaders }
-        }
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
@@ -58,14 +52,17 @@ const handler = async (req: Request): Promise<Response> => {
 
     const styleDescription = stylePrompts[style] || customPrompt || "时尚现代的服装";
 
-    const prompt = `基于这张人物照片，生成一张该人物${styleDescription}的全新图片。
+    const prompt = `请根据这张人物照片，生成一张该人物${styleDescription}的全新图片。
+
 要求：
 1. 保持人物面部特征、肤色、发型完全一致
 2. 只改变服装和配饰
 3. 保持自然的姿势和表情
 4. 服装要符合人物体型，穿着效果自然
 5. 整体风格协调，光线和背景要与原图和谐
-6. 生成高质量、逼真的换装效果图`;
+6. 生成高质量、逼真的换装效果图
+
+请直接生成图片，不需要文字说明。`;
 
     const response = await fetch("https://www.needware.dev/v1/chat/completions", {
       method: "POST",
@@ -92,7 +89,7 @@ const handler = async (req: Request): Promise<Response> => {
           }
         ],
         temperature: 0.8,
-        max_tokens: 4000,
+        max_tokens: 8192,
       }),
     });
 
@@ -103,69 +100,106 @@ const handler = async (req: Request): Promise<Response> => {
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "请求过于频繁，请稍后再试" }),
-          {
-            status: 429,
-            headers: { "Content-Type": "application/json", ...corsHeaders }
-          }
+          { status: 429, headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
       }
 
       if (response.status === 402) {
         return new Response(
           JSON.stringify({ error: "AI 服务配额已用尽" }),
-          {
-            status: 402,
-            headers: { "Content-Type": "application/json", ...corsHeaders }
-          }
+          { status: 402, headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
       }
 
-      throw new Error(`换装生成失败: ${errorText}`);
+      // Parse error message
+      let errorMessage = "AI 服务暂时不可用";
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error?.message || errorJson.message || errorMessage;
+      } catch {
+        if (errorText) errorMessage = errorText.slice(0, 200);
+      }
+
+      return new Response(
+        JSON.stringify({ error: errorMessage }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
     }
 
     const data = await response.json();
-    const result = data.choices?.[0]?.message?.content;
+    console.log("AI response structure:", JSON.stringify(data, null, 2).slice(0, 500));
 
-    if (!result) {
-      throw new Error("未能生成换装效果");
-    }
+    // Extract image from various possible response formats
+    let generatedImage: string | null = null;
 
-    // Extract image from response
-    let generatedImage = result;
-
-    // If result contains inline_data, extract the base64 image
-    if (data.choices?.[0]?.message?.content_parts) {
-      const imagePart = data.choices[0].message.content_parts.find(
-        (part: any) => part.type === "image" || part.inline_data
-      );
-      if (imagePart?.inline_data) {
-        generatedImage = `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}`;
+    // Format 1: content_parts with inline_data (Gemini native format)
+    const contentParts = data.choices?.[0]?.message?.content_parts;
+    if (contentParts && Array.isArray(contentParts)) {
+      for (const part of contentParts) {
+        if (part.inline_data?.data) {
+          const mimeType = part.inline_data.mime_type || "image/png";
+          generatedImage = `data:${mimeType};base64,${part.inline_data.data}`;
+          break;
+        }
+        if (part.type === "image" && part.data) {
+          generatedImage = `data:image/png;base64,${part.data}`;
+          break;
+        }
       }
     }
 
-    console.log("Virtual try-on completed");
+    // Format 2: content as array (OpenAI compatible format)
+    const content = data.choices?.[0]?.message?.content;
+    if (!generatedImage && Array.isArray(content)) {
+      for (const item of content) {
+        if (item.type === "image_url" && item.image_url?.url) {
+          generatedImage = item.image_url.url;
+          break;
+        }
+        if (item.type === "image" && item.data) {
+          generatedImage = `data:image/png;base64,${item.data}`;
+          break;
+        }
+      }
+    }
+
+    // Format 3: content as base64 string directly
+    if (!generatedImage && typeof content === "string") {
+      if (content.startsWith("data:image")) {
+        generatedImage = content;
+      } else if (content.match(/^[A-Za-z0-9+/=]+$/)) {
+        // Looks like base64
+        generatedImage = `data:image/png;base64,${content}`;
+      }
+    }
+
+    if (!generatedImage) {
+      console.error("Could not extract image from response:", JSON.stringify(data).slice(0, 1000));
+      return new Response(
+        JSON.stringify({
+          error: "AI 未能生成图片，请重试或尝试其他照片",
+          debug: typeof content === "string" ? content.slice(0, 200) : "No text content"
+        }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log("Virtual try-on completed successfully");
 
     return new Response(
       JSON.stringify({
         success: true,
         image: generatedImage,
-        style: style,
-        model: "gemini-3-pro-image-preview"
+        style: style
       }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders }
-      }
+      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
 
   } catch (error: any) {
     console.error("Virtual try-on error:", error);
     return new Response(
       JSON.stringify({ error: error.message || "换装失败，请重试" }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders }
-      }
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }
 };
